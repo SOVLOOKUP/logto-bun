@@ -72,10 +72,10 @@ docker run -e DB_URL=... \
 
 ## 工作原理
 
-- `Dockerfile`：构建阶段与官方完全一致（node:22-alpine + pnpm 构建），运行阶段换成 `oven/bun:1-alpine`，入口 `bun packages/core/build/index.js`。
+- `Dockerfile`：构建阶段与官方完全一致（node:22-alpine + pnpm 构建），运行阶段换成 `oven/bun:1-alpine`，入口 `docker-entrypoint.sh`（以 `packages/core` 为工作目录启动 core —— 与官方 `npm start` 语义一致，tinypool 的 argon2i worker 路径依赖 cwd）。
 - `scripts/s3-from-env.ts`：用 Bun 内置 Postgres 客户端（零依赖）把 S3 环境变量写入 `logto_configs`。
 - `.github/workflows/track-upstream.yml`：每小时检查 `logto-io/logto` 最新 release，发现新版本即记录到 `.upstream-version` 并触发构建。
-- `.github/workflows/build.yml`：多架构（amd64/arm64）构建并推送 ghcr.io，tag 与上游版本一致（`v1.43.0` / `1.43.0` / `latest`）。
+- `.github/workflows/build.yml`：多架构（amd64/arm64）构建并推送 ghcr.io，tag 与上游版本一致（`v1.43.0` / `1.43.0` / `latest`），发布前自动跑生产级启动冒烟（Postgres + seed + 启动 core + `/api/status` 探活）。
 
 ## 部署到自己的账号
 
