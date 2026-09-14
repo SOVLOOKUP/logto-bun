@@ -84,3 +84,30 @@ jobs:
         run: |
           docker run --rm --platform linux/amd64 --entrypoint bun \
             ${{ steps.image.outputs.image }}:${{ steps.meta.outputs.version }} --version
+
+      # 生产级启动冒烟：真实 Postgres + seed + 启动 core + 探活
+      - name: Boot smoke test (amd64)
+        run: |
+          docker network create logto-test
+          docker run -d --name pg --network logto-test \
+            -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=logto postgres:16-alpine
+          sleep 5
+          IMAGE="${{ steps.image.outputs.image }}:${{ steps.meta.outputs.version }}"
+          docker run --rm --platform linux/amd64 --network logto-test \
+            -e DB_URL=postgresql://postgres:postgres@pg:5432/logto \
+            "$IMAGE" cli db seed --swe
+          docker run -d --name logto --platform linux/amd64 --network logto-test \
+            -e DB_URL=postgresql://postgres:postgres@pg:5432/logto \
+            -e NODE_ENV=production -e PORT=3001 \
+            "$IMAGE"
+          OK=""
+          for i in $(seq 1 30); do
+            if docker run --rm --network logto-test curlimages/curl:latest \
+              -sf -o /dev/null http://logto:3001/api/status; then OK=1; break; fi
+            sleep 2
+          done
+          docker logs logto 2>&1
+          [ -n "$OK" ] || { docker rm -f logto pg >/dev/null 2>&1; docker network rm logto-test >/dev/null 2>&1; exit 1; }
+          docker logs logto 2>&1 | grep -q "Core app is running"
+          docker rm -f logto pg >/dev/null 2>&1; docker network rm logto-test >/dev/null 2>&1
+          echo "boot smoke test passed"
