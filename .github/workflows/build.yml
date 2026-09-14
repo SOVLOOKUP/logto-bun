@@ -16,9 +16,6 @@ on:
         required: true
         type: string
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,6 +46,10 @@ jobs:
       #     username: ${{ secrets.DOCKERHUB_USERNAME }}
       #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Compute lowercase image name
+        id: image
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Extract version metadata
         id: meta
         run: |
@@ -60,7 +61,7 @@ jobs:
         id: docker-meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ steps.image.outputs.image }}
           tags: |
             type=raw,value=${{ steps.meta.outputs.version }}
             type=raw,value=${{ steps.meta.outputs.semver }}
@@ -82,4 +83,4 @@ jobs:
       - name: Smoke test (amd64)
         run: |
           docker run --rm --platform linux/amd64 --entrypoint bun \
-            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} --version
+            ${{ steps.image.outputs.image }}:${{ steps.meta.outputs.version }} --version
