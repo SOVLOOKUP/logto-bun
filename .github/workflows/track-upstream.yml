@@ -24,6 +24,8 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       should_build: ${{ steps.check.outputs.should_build }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Query latest upstream release
         id: check
         env:
