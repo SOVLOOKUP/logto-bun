@@ -7,6 +7,12 @@ set -e
 
 cd /etc/logto
 
+# S3-from-env：设置 S3_BUCKET 等环境变量时，启动前把存储提供方配置写入数据库（幂等 upsert）
+if [ -n "$S3_BUCKET" ] && [ -n "$S3_ACCESS_KEY_ID" ] && [ -n "$S3_SECRET_ACCESS_KEY" ] && [ -n "$DB_URL" ]; then
+  echo "S3 env vars detected, syncing storageProvider config to database..."
+  bun scripts/s3-from-env.ts
+fi
+
 case "$1" in
   start|"")
     exec bun packages/core/build/index.js

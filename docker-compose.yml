@@ -1,0 +1,57 @@
+# Logto on Bun 全栈示例：core + Valkey 缓存 + MinIO (S3) 存储
+#
+#   docker compose up -d
+#   # 首次启动需要先 seed / 迁移（二选一，用官方 CLI 容器）：
+#   docker compose run --rm app cli db seed --swe && docker compose run --rm app cli db alteration deploy latest
+#   # 然后重启 app
+#
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: logto
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  # Valkey 是 Redis 的开源分支，协议完全兼容，Logto 的 REDIS_URL 直接可用
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: valkey-server --save 60 1 --loglevel notice
+
+  # MinIO 作为 S3 兼容存储（生产可换成 AWS S3 / R2 / OSS 等）
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+
+  app:
+    build: .
+    depends_on: [db, valkey, minio]
+    ports:
+      - '3001:3001'   # 认证服务
+      - '3002:3002'   # Admin Console
+    environment:
+      DB_URL: postgresql://postgres:postgres@db:5432/logto
+      ENDPOINT: http://localhost:3001
+      ADMIN_ENDPOINT: http://localhost:3002
+
+      # ---- Valkey 缓存（协议兼容 Redis，Logto 原生支持）----
+      REDIS_URL: redis://valkey:6379
+
+      # ---- S3 存储（镜像启动时自动写入 logto_configs，幂等）----
+      S3_BUCKET: logto-attachments
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: 'true'   # MinIO 必开；AWS S3 不需要
+
+volumes:
+  db-data:
+  minio-data:

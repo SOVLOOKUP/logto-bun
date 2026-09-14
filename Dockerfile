@@ -53,6 +53,7 @@ ENV NODE_ENV=production
 
 COPY --from=builder /etc/logto .
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY scripts/s3-from-env.ts /etc/logto/scripts/s3-from-env.ts
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
   && mkdir -p /etc/logto/packages/cli/alteration-scripts \
   && chmod g+w /etc/logto/packages/cli/alteration-scripts
