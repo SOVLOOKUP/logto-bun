@@ -15,7 +15,10 @@ fi
 
 case "$1" in
   start|"")
-    exec bun packages/core/build/index.js
+    # 官方镜像 start 语义为 `cd packages/core && npm start`：
+    # core 内部用 pkg-dir 按 cwd 解析 tinypool worker（argon2i）等路径，必须在 packages/core 下启动
+    cd packages/core
+    exec bun build/index.js
     ;;
   cli|logto)
     shift
