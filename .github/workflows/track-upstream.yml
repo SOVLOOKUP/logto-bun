@@ -1,0 +1,71 @@
+name: Track upstream Logto releases
+
+# 每天检查 logto-io/logto 是否有新 release；有新版本则触发构建流水线。
+# 也可手动触发（workflow_dispatch）。
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # 每小时检查一次（GitHub 实际执行可能有延迟）
+  workflow_dispatch:
+    inputs:
+      force_version:
+        description: '强制构建指定版本（如 v1.43.0），留空则取上游最新 release'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Query latest upstream release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_VERSION: ${{ inputs.force_version }}
+        run: |
+          set -e
+          if [ -n "$FORCE_VERSION" ]; then
+            LATEST="$FORCE_VERSION"
+          else
+            LATEST=$(gh api repos/logto-io/logto/releases/latest --jq .tag_name)
+          fi
+          echo "Upstream latest: $LATEST"
+
+          # 读取本仓库记录的上次构建版本
+          LAST=""
+          if [ -f .upstream-version ]; then
+            LAST=$(cat .upstream-version)
+          fi
+          echo "Last built: ${LAST:-<none>}"
+
+          if [ "$LATEST" = "$LAST" ]; then
+            echo "No new release, skipping."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Persist version marker
+        if: steps.check.outputs.should_build == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "${{ steps.check.outputs.version }}" > .upstream-version
+          git add .upstream-version
+          git commit -m "chore: build logto ${{ steps.check.outputs.version }} on bun"
+          git push
+
+  build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      logto_version: ${{ needs.check.outputs.version }}
+    secrets: inherit
