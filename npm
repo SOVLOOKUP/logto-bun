@@ -1,0 +1,78 @@
+#!/bin/sh
+# Logto on Bun —— npm 兼容垫片（shim）
+#
+# 目的：让沿用官方镜像写法的编排文件（如 1Panel 的
+#   entrypoint: sh -c "npm run cli db seed -- --swe && npm run alteration deploy latest && npm start"
+# ）无需修改即可在本镜像上工作。
+#
+# 本镜像不含真正的 npm。此垫片只翻译官方 Logto 的几种调用方式：
+#   npm start                     → 启动 core（含自动迁移）
+#   npm run start                 → 同上
+#   npm run cli <args...>         → Logto CLI（如 db seed --swe）
+#   npm run alteration <args...>  → logto db alt <args>
+#   npm run migrate               → 仅迁移
+# 其它调用一律报错提示，避免静默做出意外行为。
+set -e
+
+usage_err() {
+  cat >&2 <<'EOF'
+[logto-bun] This image runs Logto on Bun and has no real npm; `npm` is only a
+compatibility shim for official Logto invocations:
+  npm start                     start core (auto-migrate)
+  npm run start                 same
+  npm run cli <args...>         Logto CLI, e.g. db seed --swe
+  npm run alteration <args...>  logto db alt <args>
+  npm run migrate               run migrations only
+For anything else use `bun <script>` or the container entrypoint directly.
+EOF
+  exit 1
+}
+
+[ "$#" -gt 0 ] || usage_err
+cmd="$1"
+shift
+
+case "$cmd" in
+  start)
+    exec /usr/local/bin/docker-entrypoint.sh start
+    ;;
+  run)
+    [ "$#" -gt 0 ] || usage_err
+    script="$1"
+    shift
+
+    # 过滤掉 npm 参数分隔符 `--`（等价于 `npm run x -- a b` → `x a b`）
+    remaining=$#
+    i=1
+    while [ "$i" -le "$remaining" ]; do
+      arg="$1"
+      shift
+      i=$((i + 1))
+      if [ "$arg" = "--" ]; then
+        continue
+      fi
+      set -- "$@" "$arg"
+    done
+
+    case "$script" in
+      start)
+        exec /usr/local/bin/docker-entrypoint.sh start
+        ;;
+      cli)
+        exec /usr/local/bin/docker-entrypoint.sh cli "$@"
+        ;;
+      alteration)
+        exec /usr/local/bin/docker-entrypoint.sh cli db alt "$@"
+        ;;
+      migrate)
+        exec /usr/local/bin/docker-entrypoint.sh migrate
+        ;;
+      *)
+        usage_err
+        ;;
+    esac
+    ;;
+  *)
+    usage_err
+    ;;
+esac

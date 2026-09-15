@@ -53,10 +53,14 @@ ENV NODE_ENV=production
 
 COPY --from=builder /etc/logto .
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY npm /usr/local/bin/npm
 COPY scripts/s3-from-env.ts /etc/logto/scripts/s3-from-env.ts
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/npm \
   && mkdir -p /etc/logto/packages/cli/alteration-scripts \
   && chmod g+w /etc/logto/packages/cli/alteration-scripts
+
+# 启动时自动执行数据库 seed + alteration deploy（可用 AUTO_MIGRATE=false 关闭）
+ENV AUTO_MIGRATE=true
 
 EXPOSE 3001
 ENTRYPOINT ["docker-entrypoint.sh"]

@@ -1,9 +1,13 @@
 # Logto on Bun 全栈示例：core + Valkey 缓存 + MinIO (S3) 存储
 #
 #   docker compose up -d
-#   # 首次启动需要先 seed / 迁移（二选一，用官方 CLI 容器）：
-#   docker compose run --rm app cli db seed --swe && docker compose run --rm app cli db alteration deploy latest
-#   # 然后重启 app
+#
+# 首次启动无需任何手动步骤：镜像启动时会自动等待数据库、执行
+#   db seed --swe（表已存在则跳过）+ db alteration deploy latest（增量）
+# 然后才启动 core —— 也就是把官方模板里的
+#   npm run cli db seed -- --swe && npm run alteration deploy latest && npm start
+# 内嵌进了镜像。升级 Logto 版本时直接换镜像 tag 重启即可，无需手工迁移。
+# 需要手工控制时设 AUTO_MIGRATE: 'false'（或用 `<image> migrate` 单独跑迁移）。
 #
 services:
   db:
@@ -41,10 +45,15 @@ services:
       ENDPOINT: http://localhost:3001
       ADMIN_ENDPOINT: http://localhost:3002
 
+      # ---- 自动数据库初始化/升级（默认即开启，此处显式写出便于阅读）----
+      AUTO_MIGRATE: 'true'
+      DB_WAIT_ATTEMPTS: '30'   # DB 容器起得慢时自动重试
+      DB_WAIT_INTERVAL: '2'
+
       # ---- Valkey 缓存（协议兼容 Redis，Logto 原生支持）----
       REDIS_URL: redis://valkey:6379
 
-      # ---- S3 存储（镜像启动时自动写入 logto_configs，幂等）----
+      # ---- S3 存储（镜像启动时自动写入 logto_configs，幂等；在迁移之后执行）----
       S3_BUCKET: logto-attachments
       S3_ACCESS_KEY_ID: minioadmin
       S3_SECRET_ACCESS_KEY: minioadmin
